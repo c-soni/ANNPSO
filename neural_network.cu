@@ -82,12 +82,23 @@ void LeakyReLU(float *Input, int Size)
 	}
 }
 
+// Sigmoid activiation function
 __global__
 void Sigmoid(float *Input, int Size)
 {
 	int Index = blockDim.x * blockIdx.x + threadIdx.x;
 	if(Index < Size)
     	Input[Index] = (1 / (1 + __expf(-Input[Index])));
+}
+
+// MSE loss function
+__device__
+void MSE(float *Actual, float *Predicted, float *Fitness, int Size)
+{
+	for(int i = 0; i < Size; i++)
+	{
+		*Fitness += (Actual[i] - Predicted[i]) * (Actual[i] - Predicted[i]);
+	}
 }
 
 // Kernel which actually trains the data.
@@ -490,27 +501,31 @@ void NeuralNetwork::Load(const char *FileName)
     int Size;
     float *InputFeatures;
     float *OutputFeatures;
-    int Width = this->InputNeurons;
+    int InputWidth = this->InputNeurons;
+	int OutputWidth = this->OutputNeurons;
     fstream FIn;
     FIn.open(FileName);
     if(!FIn.fail())
     {
         cout << "FILE OPENED" << endl;
         FIn >> Size;
-        InputFeatures = new float[Size * Width];
+        InputFeatures = new float[Size * InputWidth];
         OutputFeatures = new float[Size];
         cout << "SPACE ALLOCATED" << endl;
         int temp;
 
         for(int i = 0; i < Size; i++)
         {
-            for(int j = 0; j < Width; j++)
+            for(int j = 0; j < InputWidth; j++)
             {
                 FIn >> temp;
-                InputFeatures[i * Width + j] = float(temp);
+                InputFeatures[i * InputWidth + j] = float(temp);
             }
-            FIn >> temp;
-            OutputFeatures[i] = float(temp);
+			for(int j = 0; j < OutputWidth; j++)
+            {
+                FIn >> temp;
+                OutputFeatures[i * OutputWidth + j] = float(temp);
+            }
         }
     }
     FIn.close();
@@ -522,16 +537,16 @@ void NeuralNetwork::Load(const char *FileName)
 
     //Transfer to GPU (Single cudaMemcpy() for the time being)
     float* DeviceInputFeatures;
-    cudaMalloc((void**)&DeviceInputFeatures, Size * Width * sizeof(float));
+    cudaMalloc((void**)&DeviceInputFeatures, Size * InputWidth * sizeof(float));
 	cudaCheckError();
-    cudaMemcpy(DeviceInputFeatures, InputFeatures, Size * Width * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(DeviceInputFeatures, InputFeatures, Size * InputWidth * sizeof(float), cudaMemcpyHostToDevice);
 	cudaCheckError();
     this->InputFeatures = DeviceInputFeatures;
 
     float* DeviceOutputFeatures;
-    cudaMalloc((void**)&DeviceOutputFeatures, Size * sizeof(float));
+    cudaMalloc((void**)&DeviceOutputFeatures, Size * OutputWidth * sizeof(float));
 	cudaCheckError();
-    cudaMemcpy(DeviceOutputFeatures, OutputFeatures, Size * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(DeviceOutputFeatures, OutputFeatures, Size * OutputWidth * sizeof(float), cudaMemcpyHostToDevice);
 	cudaCheckError();
     this->OutputFeatures = DeviceOutputFeatures;
 
@@ -705,14 +720,15 @@ void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
 	{
 		FIn >> NumSamples;
 		InputFeatures = new float[NumSamples * InputNeurons];
-		OutputFeatures = new float[NumSamples];
+		OutputFeatures = new float[NumSamples * OutputNeurons];
 
 		for(int i = 0; i < NumSamples; i++)
 		{
 			for(int j = 0; j < InputNeurons; j++)
 				FIn >> InputFeatures[i * InputNeurons + j];
 
-			FIn >> OutputFeatures[i];
+			for(int j = 0; j < OutputNeurons; j++)
+				FIn >> OutputFeatures[i * OutputNeurons + j];
 		}
 	}
 	FIn.close();
@@ -724,9 +740,9 @@ void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
 	cudaCheckError();
 
 	float *WeightsAndBiases;
-	cudaMalloc((void**)&WeightsAndBiases, NetworkSize * sizeof(float));
+	cudaMalloc((void**)&WeightsAndBiases, NetworkSize * OutputNeurons * sizeof(float));
 	cudaCheckError();
-	cudaMemcpy(WeightsAndBiases, Weights, NetworkSize * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMemcpy(WeightsAndBiases, Weights, NetworkSize * OutputNeurons * sizeof(float), cudaMemcpyHostToDevice);
 	cudaCheckError();
 
 	cublasHandle_t Handle;
@@ -818,7 +834,7 @@ void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
 		cudaCheckError();
 		cudaDeviceSynchronize();
 
-		cudaMemcpy(&TempFitness, Output, sizeof(float), cudaMemcpyDeviceToHost);
+		cudaMemcpy(&TempFitness, Output, OutputNeurons * sizeof(float), cudaMemcpyDeviceToHost);
 		Fitness += (OutputFeatures[j] - TempFitness) * (OutputFeatures[j] - TempFitness);
 	}
 
