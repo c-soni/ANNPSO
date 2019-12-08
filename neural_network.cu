@@ -378,11 +378,11 @@ void NeuralNetwork::CheckKernel()
 NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeurons, int OutputNeurons, int NumParticles)
 {
     //NN hyperparameters
-    this->InputNeurons = InputNeurons;
-    this->HiddenLayers = HiddenLayers;
-    this->HiddenNeurons = HiddenNeurons;
-    this->OutputNeurons = OutputNeurons;
-    this->NumParticles = NumParticles;
+    this->NNParams.InputNeurons = InputNeurons;
+    this->NNParams.HiddenLayers = HiddenLayers;
+    this->NNParams.HiddenNeurons = HiddenNeurons;
+    this->NNParams.OutputNeurons = OutputNeurons;
+    this->PSOParams.NumParticles = NumParticles;
     cout << "HYPERPARAMETERS SET" << endl;
 
     //Initialize random weights and biases on the GPU
@@ -391,7 +391,7 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
                                     + (((HiddenNeurons +1) * HiddenNeurons)
                                         * (HiddenLayers - 1))
                                     + ((HiddenNeurons + 1) * OutputNeurons);
-    this->NetworkSize = NetworkSize;
+    this->NNParams.NetworkSize = NetworkSize;
 
     //Total
     int TotalWeightsAndBiases = NumParticles * NetworkSize;
@@ -412,11 +412,11 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
 
     //Max space to be allocated to intermediate I/O
     int MaxIOLength = 2 * max(InputNeurons, max(HiddenNeurons, OutputNeurons));
-    this->MaxIOLength = MaxIOLength;
+    this->NNParams.MaxIOLength = MaxIOLength;
     float *IntermediateIO;
-    cudaMalloc((void**)&IntermediateIO, MaxIOLength * sizeof(float) * this->NumParticles);
+    cudaMalloc((void**)&IntermediateIO, MaxIOLength * sizeof(float) * this->PSOParams.NumParticles);
     cudaCheckError();
-    this->IntermediateIO = IntermediateIO;
+    this->NNParams.IntermediateIO = IntermediateIO;
 
     //Allocate device memory for velocities
     float *Velocities;
@@ -428,26 +428,26 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
     float *FitnessArray;
     cudaMalloc((void**)&FitnessArray, NumParticles * sizeof(float));
     cudaCheckError();
-    this->FitnessArray = FitnessArray;
+    this->PSOParams.FitnessArray = FitnessArray;
     cout << "GPU SPACE ALLOCATED FOR FITNESS VALUES" << endl;
 
     //InitToVal grid and block
-    dim3 InitGrid((this->NumParticles - 1) / 32 + 1, 1, 1);
+    dim3 InitGrid((this->PSOParams.NumParticles - 1) / 32 + 1, 1, 1);
     dim3 InitBlock(32, 1, 1);
 
     //Allocate device memory for fitness values
     float *PersonalBestFitness;
     cudaMalloc((void**)&PersonalBestFitness, NumParticles * sizeof(float));
     cudaCheckError();
-    InitToVal <<<InitGrid, InitBlock>>> (PersonalBestFitness, this->NumParticles, INF);
+    InitToVal <<<InitGrid, InitBlock>>> (PersonalBestFitness, this->PSOParams.NumParticles, INF);
     cudaCheckError();
-    this->PersonalBestFitness = PersonalBestFitness;
+    this->PSOParams.PersonalBestFitness = PersonalBestFitness;
     cout << "GPU SPACE ALLOCATED FOR PERSONAL BEST FITNESS VALUES" << endl;
 
     //Initialize generator
     curandGenerator_t Gen;
     curandCreateGenerator(&Gen, CURAND_RNG_QUASI_SOBOL32);
-    curandSetQuasiRandomGeneratorDimensions(Gen, this->NetworkSize);
+    curandSetQuasiRandomGeneratorDimensions(Gen, this->NNParams.NetworkSize);
     curandSetPseudoRandomGeneratorSeed(Gen, time(NULL));
     cout << "CURAND GENERATOR INITIALIZED" << endl;
 
@@ -456,36 +456,36 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
     dim3 NormalizeBlock(NumParticles, 1, 1);
 
     //Transpose grid and block
-    dim3 TransposeGrid((this->NumParticles - 1) / TILE_WIDTH + 1, (this->NetworkSize - 1) / TILE_WIDTH + 1, 1);
+    dim3 TransposeGrid((this->PSOParams.NumParticles - 1) / TILE_WIDTH + 1, (this->NNParams.NetworkSize - 1) / TILE_WIDTH + 1, 1);
     dim3 TransposeBlock(TILE_WIDTH, TILE_WIDTH, 1);
 
     //Generate weights and biases
     curandGenerateUniform(Gen, WeightsAndBiases, TotalWeightsAndBiases);
     Normalize <<<NormalizeGrid, NormalizeBlock>>> (WeightsAndBiases, TotalWeightsAndBiases, 10.0f);
     cudaCheckError();
-    Transpose <<<TransposeGrid, TransposeBlock>>> (WeightsAndBiases, PersonalBestWeights, this->NetworkSize, this->NumParticles);
+    Transpose <<<TransposeGrid, TransposeBlock>>> (WeightsAndBiases, PersonalBestWeights, this->NNParams.NetworkSize, this->PSOParams.NumParticles);
     cudaCheckError();
-    this->WeightsAndBiases = WeightsAndBiases;
+    this->NNParams.WeightsAndBiases = WeightsAndBiases;
     cout << "WEIGHTS AND BIASES INITIALIZED ON GPU" << endl;
 
     //Copy generated weights and biases to personal best array for initialization
     DeviceToDevice <<<NormalizeGrid, NormalizeBlock>>> (WeightsAndBiases, PersonalBestWeights, TotalWeightsAndBiases);
-    this->PersonalBestWeights = PersonalBestWeights;
+    this->PSOParams.PersonalBestWeights = PersonalBestWeights;
 
     //Generate velocities
     curandGenerateUniform(Gen, Velocities, TotalWeightsAndBiases);
     Normalize <<<NormalizeGrid, NormalizeBlock>>> (Velocities, TotalWeightsAndBiases, 1.0f);
     cudaCheckError();
-    this->Velocities = Velocities;
+    this->PSOParams.Velocities = Velocities;
     cout << "VELOCITIES INITIALIZED ON GPU" << endl;
 
     //Allocate space for curand states
     curandState_t *States;
     cudaMalloc((void**)&States, NumParticles * sizeof(curandState_t));
     cudaCheckError();
-    InitRNGStates <<<InitGrid, InitBlock>>> (States, this->NumParticles);
+    InitRNGStates <<<InitGrid, InitBlock>>> (States, this->PSOParams.NumParticles);
     cudaCheckError();
-    this->States = States;
+    this->PSOParams.States = States;
     cout << "SPACE ALLOCATED FOR CURAND STATES" << endl;
 
     //Synchronize all kernel calls upto this point
@@ -501,8 +501,8 @@ void NeuralNetwork::Load(const char *FileName)
     int Size;
     float *InputFeatures;
     float *OutputFeatures;
-    int InputWidth = this->InputNeurons;
-    int OutputWidth = this->OutputNeurons;
+    int InputWidth = this->NNParams.InputNeurons;
+    int OutputWidth = this->NNParams.OutputNeurons;
     fstream FIn;
     FIn.open(FileName);
     if(!FIn.fail())
@@ -531,7 +531,7 @@ void NeuralNetwork::Load(const char *FileName)
     FIn.close();
 
     cout << "INPUT OUTPUT SPACE REQUIRED: " << Size * 24 / 1024 << "KB" << endl;
-    this->NumVectors = Size;
+    this->NNParams.NumVectors = Size;
 
     cout << "INPUT AND OUTPUT LOADED AND FILE CLOSED" << endl;
 
@@ -541,14 +541,14 @@ void NeuralNetwork::Load(const char *FileName)
     cudaCheckError();
     cudaMemcpy(DeviceInputFeatures, InputFeatures, Size * InputWidth * sizeof(float), cudaMemcpyHostToDevice);
     cudaCheckError();
-    this->InputFeatures = DeviceInputFeatures;
+    this->NNParams.InputFeatures = DeviceInputFeatures;
 
     float* DeviceOutputFeatures;
     cudaMalloc((void**)&DeviceOutputFeatures, Size * OutputWidth * sizeof(float));
     cudaCheckError();
     cudaMemcpy(DeviceOutputFeatures, OutputFeatures, Size * OutputWidth * sizeof(float), cudaMemcpyHostToDevice);
     cudaCheckError();
-    this->OutputFeatures = DeviceOutputFeatures;
+    this->NNParams.OutputFeatures = DeviceOutputFeatures;
 
     cout << "INPUT AND OUTPUT TRANSFERRED TO GPU" << endl;
 }
@@ -559,27 +559,27 @@ void NeuralNetwork::Load(const char *FileName)
 // Assumes weight matrix to be in column major format.
 void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
 {
-    dim3 Grid((this->NumParticles - 1) / 32 + 1, 1, 1);
+    dim3 Grid((this->PSOParams.NumParticles - 1) / 32 + 1, 1, 1);
     dim3 Block(32, 1, 1);
 
     //NN parameters struct
     NNParameters NNParams;
     NNParams.Epochs = Epochs;
-    NNParams.InputNeurons = this->InputNeurons;
-    NNParams.HiddenLayers = this->HiddenLayers;
-    NNParams.HiddenNeurons = this->HiddenNeurons;
-    NNParams.OutputNeurons = this->OutputNeurons;
-    NNParams.NetworkSize = this->NetworkSize;
-    NNParams.MaxIOLength = this->MaxIOLength;
-    NNParams.NumVectors = this->NumVectors;
-    NNParams.InputFeatures = this->InputFeatures;
-    NNParams.IntermediateIO = this->IntermediateIO;
-    NNParams.OutputFeatures = this->OutputFeatures;
-    NNParams.WeightsAndBiases = this->WeightsAndBiases;
+    NNParams.InputNeurons = this->NNParams.InputNeurons;
+    NNParams.HiddenLayers = this->NNParams.HiddenLayers;
+    NNParams.HiddenNeurons = this->NNParams.HiddenNeurons;
+    NNParams.OutputNeurons = this->NNParams.OutputNeurons;
+    NNParams.NetworkSize = this->NNParams.NetworkSize;
+    NNParams.MaxIOLength = this->NNParams.MaxIOLength;
+    NNParams.NumVectors = this->NNParams.NumVectors;
+    NNParams.InputFeatures = this->NNParams.InputFeatures;
+    NNParams.IntermediateIO = this->NNParams.IntermediateIO;
+    NNParams.OutputFeatures = this->NNParams.OutputFeatures;
+    NNParams.WeightsAndBiases = this->NNParams.WeightsAndBiases;
 
     //PSO parameters struct
     PSOParameters PSOParams;
-    PSOParams.NumParticles = this->NumParticles;
+    PSOParams.NumParticles = this->PSOParams.NumParticles;
     PSOParams.C1 = 2.05f;
     PSOParams.C2 = 2.05f;
     float Psi = PSOParams.C1 + PSOParams.C2;
@@ -587,11 +587,11 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
     PSOParams.Chi = Chi;
     PSOParams.XMax = 10.0f;
     PSOParams.VMax = 1.0f;
-    PSOParams.FitnessArray = this->FitnessArray;
-    PSOParams.PersonalBestFitness = this->PersonalBestFitness;
-    PSOParams.States = this->States;
-    PSOParams.PersonalBestWeights = this->PersonalBestWeights;
-    PSOParams.Velocities = this->Velocities;
+    PSOParams.FitnessArray = this->PSOParams.FitnessArray;
+    PSOParams.PersonalBestFitness = this->PSOParams.PersonalBestFitness;
+    PSOParams.States = this->PSOParams.States;
+    PSOParams.PersonalBestWeights = this->PSOParams.PersonalBestWeights;
+    PSOParams.Velocities = this->PSOParams.Velocities;
 
     NNParameters *D_NNParams;
     PSOParameters *D_PSOParams;
@@ -606,7 +606,7 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
     cudaMemcpy(D_PSOParams, &PSOParams, sizeof(PSOParameters), cudaMemcpyHostToDevice);
     cudaCheckError();
 
-    float *Results = new float[this->NumParticles];
+    float *Results = new float[this->PSOParams.NumParticles];
     int BestIndex = 0;
     float Best = INF;
 
@@ -623,12 +623,12 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
 
         if(Verbose)
         {
-            cudaMemcpy(Results, PSOParams.PersonalBestFitness, this->NumParticles * sizeof(float), cudaMemcpyDeviceToHost);
+            cudaMemcpy(Results, PSOParams.PersonalBestFitness, this->PSOParams.NumParticles * sizeof(float), cudaMemcpyDeviceToHost);
             cudaCheckError();
             BestIndex = 0;
             Best = Results[0];
             cout << "[" << Results[0];
-            for(int j = 1; j < this->NumParticles; j++)
+            for(int j = 1; j < this->PSOParams.NumParticles; j++)
             {
                 if(Best > Results[j])
                 {
@@ -643,12 +643,12 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
         }
     }
 
-    cudaMemcpy(Results, PSOParams.PersonalBestFitness, this->NumParticles * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(Results, PSOParams.PersonalBestFitness, this->PSOParams.NumParticles * sizeof(float), cudaMemcpyDeviceToHost);
     cudaCheckError();
 
     BestIndex = 0;
     Best = Results[0];
-    for(int i = 1; i < this->NumParticles; i++)
+    for(int i = 1; i < this->PSOParams.NumParticles; i++)
     {
         if(Best > Results[i])
         {
@@ -660,9 +660,9 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
     cout << "FINAL BEST PARTICLE: " << BestIndex << endl;
     cout << "FINAL BEST FITNESS: " << Best << endl;
 
-    float *DeviceBestNetwork = &this->PersonalBestWeights[this->NetworkSize * BestIndex];
-    float *BestNetwork = new float[this->NetworkSize];
-    cudaMemcpy(BestNetwork, DeviceBestNetwork, this->NetworkSize * sizeof(float), cudaMemcpyDeviceToHost);
+    float *DeviceBestNetwork = &this->PSOParams.PersonalBestWeights[this->NNParams.NetworkSize * BestIndex];
+    float *BestNetwork = new float[this->NNParams.NetworkSize];
+    cudaMemcpy(BestNetwork, DeviceBestNetwork, this->NNParams.NetworkSize * sizeof(float), cudaMemcpyDeviceToHost);
     cudaCheckError();
 
     //Dump to file
@@ -670,11 +670,11 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
     FOut.open(WeightsFile, fstream::out);
     if(!FOut.fail())
     {
-        FOut << this->InputNeurons << endl;
-        FOut << this->HiddenLayers << endl;
-        FOut << this->HiddenNeurons << endl;
-        FOut << this->OutputNeurons << endl;
-        for(int i = 0; i < this->NetworkSize; i++)
+        FOut << this->NNParams.InputNeurons << endl;
+        FOut << this->NNParams.HiddenLayers << endl;
+        FOut << this->NNParams.HiddenNeurons << endl;
+        FOut << this->NNParams.OutputNeurons << endl;
+        for(int i = 0; i < this->NNParams.NetworkSize; i++)
         {
             FOut << BestNetwork[i] << endl;
         }

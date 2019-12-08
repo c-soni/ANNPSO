@@ -11,8 +11,6 @@
 #include <curand.h>
 #include <curand_kernel.h>
 #include <cublas_v2.h>
-#include <thrust/execution_policy.h>
-#include <thrust/sort.h>
 
 typedef struct PSOParameters
 {
@@ -48,13 +46,8 @@ typedef struct NNParameters
 class NeuralNetwork
 {
 private:
-    int InputNeurons, HiddenLayers, HiddenNeurons, OutputNeurons;
-    int NumParticles, NetworkSize;
-    int MaxIOLength, NumVectors;
-    float *WeightsAndBiases;
-    float *InputFeatures, *OutputFeatures, *IntermediateIO;
-    float *Velocities, *FitnessArray, *PersonalBestFitness, *PersonalBestWeights;
-    curandState_t *States;
+    PSOParameters PSOParams;
+    NNParameters NNParams;
 
 public:
     //Randomly initialize weights and biases for all particles of the swarm
