@@ -2,3 +2,4 @@ application
 train.txt
 test.txt
 *weights.txt
+*.o

@@ -16,33 +16,33 @@
 
 typedef struct PSOParameters
 {
-	curandState_t *States = NULL;
-	int NumParticles = 0;
-	float *FitnessArray = NULL;
-	float *PersonalBestFitness = NULL;
-	float *PersonalBestWeights = NULL;
-	float *Velocities = NULL;
-	float C1 = 0.0f;
-	float C2 = 0.0f;
-	float Chi = 0.0f;
-	float XMax = 0.0f;
-	float VMax = 0.0f;
+    curandState_t *States;
+    int NumParticles;
+    float *FitnessArray;
+    float *PersonalBestFitness;
+    float *PersonalBestWeights;
+    float *Velocities;
+    float C1;
+    float C2;
+    float Chi;
+    float XMax;
+    float VMax;
 } PSOParameters;
 
 typedef struct NNParameters
 {
-	int Epochs = 0;
-	int InputNeurons = 0;
-	int HiddenLayers = 0;
-	int HiddenNeurons = 0;
-	int OutputNeurons = 0;
-	int NetworkSize = 0;
-	int MaxIOLength = 0;
-	int NumVectors = 0;
-	float *WeightsAndBiases = NULL;
-	float *InputFeatures = NULL;
-	float *IntermediateIO = NULL;
-	float *OutputFeatures = NULL;
+    int Epochs;
+    int InputNeurons;
+    int HiddenLayers;
+    int HiddenNeurons;
+    int OutputNeurons;
+    int NetworkSize;
+    int MaxIOLength;
+    int NumVectors;
+    float *WeightsAndBiases;
+    float *InputFeatures;
+    float *IntermediateIO;
+    float *OutputFeatures;
 } NNParameters;
 
 class NeuralNetwork
