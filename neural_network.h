@@ -51,23 +51,23 @@ private:
 
 public:
     //Randomly initialize weights and biases for all particles of the swarm
-    NeuralNetwork(int, int, int, int, int);
+    NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeurons, int OutputNeurons, int NumParticles);
 
     //Load()
     //Load data from a file into the main memory/GPU memory (as needed)
     //Reshape data if needed (especially separating input features from output labels)
     //Set up streams later on if needed
-    void Load(const char *);
+    void Load(const char *FileName);
 
     //Train()
     //FeedForward combined with PSO
     //Number of particles taken from constructor
-    void Train(int, const char *, bool);
+    void Train(int Epochs, const char *WeightsFile, bool Verbose);
 
 
     //Test()
     //Use the best set of weights and biases amongst all particles
-    void Test(const char *, const char *);
+    void Test(const char *TestFile, const char *WeightsFile);
 
     //Dump()
     //Dump the best set of weights and biases to a file
