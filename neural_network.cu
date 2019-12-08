@@ -750,7 +750,7 @@ void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
 
     float Alpha = 1.0f, Beta = 0.0f;
     float Fitness = 0.0f, TempFitness = 0.0f;
-    float *Input, *Output, *Matrix, * Temp;
+    float *Input, *Output, *Matrix, *Temp;
 
     int MaxIOLength = 2 * max(InputNeurons, max(HiddenNeurons, OutputNeurons));
     float *IntermediateIO;

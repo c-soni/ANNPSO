@@ -16,33 +16,33 @@
 
 typedef struct PSOParameters
 {
-    curandState_t *States;
-    int NumParticles;
-    float *FitnessArray;
-    float *PersonalBestFitness;
-    float *PersonalBestWeights;
-    float *Velocities;
-    float C1;
-    float C2;
-    float Chi;
-    float XMax;
-    float VMax;
+    curandState_t *States;        // Store the state of the GPU random number generator per thread.
+    int NumParticles;             // Number of particles in the swarm.
+    float *FitnessArray;          // Array for storing the fitness value of all particles.
+    float *PersonalBestFitness;   // PBest values of fitness for all particles.
+    float *PersonalBestWeights;   // PBest values of weights for all particles.
+    float *Velocities;            // Velocities of all particles.
+    float C1;                     // Constant value c1.
+    float C2;                     // Constant value c2.
+    float Chi;                    // Constant value chi.
+    float XMax;                   // Upper limit of the sample space, limits position values to [-XMax, XMax].
+    float VMax;                   // Upper limit to the velocity, limits velocity values to [-VMax, VMax].
 } PSOParameters;
 
 typedef struct NNParameters
 {
-    int Epochs;
-    int InputNeurons;
-    int HiddenLayers;
-    int HiddenNeurons;
-    int OutputNeurons;
-    int NetworkSize;
-    int MaxIOLength;
-    int NumVectors;
-    float *WeightsAndBiases;
-    float *InputFeatures;
-    float *IntermediateIO;
-    float *OutputFeatures;
+    int Epochs;                   // Number of epochs to be run.
+    int InputNeurons;             // Number of input neurons in the input layer.
+    int HiddenLayers;             // Number of hidden neurons per hidden layer.
+    int HiddenNeurons;            // Number of hidden layers in the network.
+    int OutputNeurons;            // Number of output neurons in the output layer.
+    int NetworkSize;              // Total number of neurons in the neural network.
+    int MaxIOLength;              // Size of the intermediate IO buffer (number of elements, not bytes).
+    int NumVectors;               // Number of samples (feature vectors) in the training set.
+    float *WeightsAndBiases;      // Storage buffer for the training weights and biases of all networks.
+    float *InputFeatures;         // Storage buffer for training data samples.
+    float *IntermediateIO;        // Temporary storage of intermediate IO.
+    float *OutputFeatures;        // Storage buffer for training labels.
 } NNParameters;
 
 class NeuralNetwork
