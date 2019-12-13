@@ -1,18 +1,16 @@
 #include "neural_network.h"
 
-using namespace std;
-
 int main()
 {
-    cout << "CONSTRUCTOR INVOKED" << endl;
+    std::cout << "CONSTRUCTOR INVOKED" << std::endl;
     NeuralNetwork NN(5, 3, 3, 1, 32);
 
-    cout << "LOAD INVOKED" << endl;
+    std::cout << "LOAD INVOKED" << std::endl;
     NN.Load("train.txt");
 
-    cout << "TRAIN INVOKED" << endl;
+    std::cout << "TRAIN INVOKED" << std::endl;
     NN.Train(1000, "weights.txt", true);
 
-    cout << "TEST INVOKED" << endl;
-    NN.Test("test.txt", "epochs20k_weights.txt");
+    std::cout << "TEST INVOKED" << std::endl;
+    NN.Test("test.txt", "weights.txt");
 }

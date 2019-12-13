@@ -14,9 +14,7 @@
     }\
 }
 
-using namespace std;
-
-// Normalizes a vector to [-MaxValue, MaxValue]
+// Normalizes a vector of values in [0, 1] to [-MaxValue, MaxValue]
 __global__
 void Normalize(float *Array, int Number, float MaxValue)
 {
@@ -43,7 +41,7 @@ void Transpose(float *InputMatrix, float *OutputMatrix, int Rows, int Columns)
     }
 }
 
-// Initialize to infinity
+// Initialize to value
 __global__
 void InitToVal(float *Input, int Size, float Value)
 {
@@ -91,67 +89,177 @@ void Sigmoid(float *Input, int Size)
         Input[Index] = (1 / (1 + __expf(-Input[Index])));
 }
 
-// MSE loss function
-__device__
-void MSE(float *Actual, float *Predicted, float *Fitness, int Size)
+// SquaredError loss function
+__global__
+void SquaredError(float *Predicted, float *Actual, float *Fitness, int Size)
 {
-    for(int i = 0; i < Size; i++)
-    {
-        *Fitness += (Actual[i] - Predicted[i]) * (Actual[i] - Predicted[i]);
-    }
+    int Index = blockDim.x * blockIdx.x + threadIdx.x;
+    if(Index < Size)
+        Fitness[Index] += (Predicted[Index] - (*Actual)) * (Predicted[Index] - (*Actual));
+}
+
+// Mean function
+__global__
+void Mean(float *Input, int NumElements, int Size)
+{
+    int Index = blockDim.x * blockIdx.x + threadIdx.x;
+    if(Index < Size)
+        Input[Index] /= NumElements;
 }
 
 // Kernel which actually trains the data.
-__global__
-void FeedForward(NNParameters *NNP, PSOParameters *PSOP)
+// __global__
+// void FeedForward(NNParameters *NNP, PSOParameters *PSOP)
+// {
+//     int Index = blockDim.x * blockIdx.x + threadIdx.x;
+//     __shared__ NNParameters NNParams;
+//     __shared__ PSOParameters PSOParams;
+
+//     if(threadIdx.x == 0)
+//     {
+//         NNParams = *NNP;
+//         PSOParams = *PSOP;
+//     }
+
+//     if(Index < PSOParams.NumParticles)
+//     {
+//         //Pointer to weights and biases
+//         float *WeightsAndBiases = &NNParams.WeightsAndBiases[Index * NNParams.NetworkSize];
+
+//         //Input, output, matrix and temporary pointers
+//         float *Input;
+//         float *Output;
+//         float *Matrix;
+//         float *Temp;
+
+//         //Fitness value
+//         float Fitness = 0.0f;
+
+//         //cuBLAS handle initialization
+//         cublasHandle_t Handle;
+//         cublasCreate(&Handle);
+
+//         //Alpha and beta values
+//         float Alpha = 1.0f;
+//         float Beta = 0.0f;
+
+//         Fitness = 0.0f;
+
+//         //Main feed forward work to be done here
+//         //Calculate fitness, i.e. loss (MSE?)
+//         for(int j = 0; j < NNParams.NumVectors; j++)
+//         {
+//             //Input hidden multiplication + biases
+//             Input = &(NNParams.InputFeatures[NNParams.InputNeurons * j]);
+//             Output = &(NNParams.IntermediateIO[NNParams.MaxIOLength * Index]);
+//             Matrix = &(NNParams.WeightsAndBiases[NNParams.NetworkSize * Index]);
+
+//             cublasSgemv(Handle, CUBLAS_OP_N,
+//                 NNParams.HiddenNeurons, NNParams.InputNeurons, &Alpha,
+//                 Matrix, NNParams.HiddenNeurons, Input, 1, &Beta, Output, 1);
+//             cudaDeviceSynchronize();
+
+//             Matrix += NNParams.InputNeurons * NNParams.HiddenNeurons;
+
+//             //Add biases
+//             cublasSaxpy(Handle, NNParams.HiddenNeurons,
+//                 &Alpha, Matrix, 1, Output, 1);
+
+//             //Activation function
+//             LeakyReLU <<<(NNParams.HiddenNeurons - 1) / 32 + 1, 32>>> (Output, NNParams.HiddenNeurons);
+//             cudaDeviceSynchronize();
+
+//             Input = Output + NNParams.MaxIOLength / 2;
+//             Matrix += NNParams.HiddenNeurons;
+
+//             //Hidden hidden loop
+//             for(int c = 1; c < NNParams.HiddenLayers; c++)
+//             {
+//                 //Swap input and output
+//                 Temp = Input;
+//                 Input = Output;
+//                 Output = Temp;
+
+//                 //Multiply
+//                 cublasSgemv(Handle, CUBLAS_OP_N,
+//                     NNParams.HiddenNeurons, NNParams.HiddenNeurons, &Alpha,
+//                     Matrix, NNParams.HiddenNeurons, Input, 1, &Beta, Output, 1);
+//                 cudaDeviceSynchronize();
+
+//                 Matrix += NNParams.HiddenNeurons * NNParams.HiddenNeurons;
+
+//                 //Add biases
+//                 cublasSaxpy(Handle, NNParams.HiddenNeurons,
+//                     &Alpha, Matrix, 1, Output, 1);
+
+//                 //Activation function
+//                 LeakyReLU <<<(NNParams.HiddenNeurons - 1) / 32 + 1, 32>>> (Output, NNParams.HiddenNeurons);
+//                 cudaDeviceSynchronize();
+
+//                 Matrix += NNParams.HiddenNeurons;
+//             }
+
+//             //Hidden output multiplication + biases
+//             //Multiply
+//             cublasSgemv(Handle, CUBLAS_OP_N,
+//                 NNParams.OutputNeurons, NNParams.HiddenNeurons, &Alpha,
+//                 Matrix, NNParams.OutputNeurons, Input, 1, &Beta, Output, 1);
+//             cudaDeviceSynchronize();
+
+//             Matrix += NNParams.HiddenNeurons * NNParams.OutputNeurons;
+
+//             //Add biases
+//             cublasSaxpy(Handle, NNParams.OutputNeurons,
+//                 &Alpha, Matrix, 1, Output, 1);
+
+//             //Activation function
+//             Sigmoid <<<(NNParams.OutputNeurons - 1) / 32 + 1, 32>>> (Output, NNParams.OutputNeurons);
+//             cudaDeviceSynchronize();
+
+//             Fitness += (NNParams.OutputFeatures[j] - Output[0]) * (NNParams.OutputFeatures[j] - Output[0]);
+//         }
+
+//         Fitness /= NNParams.NumVectors;
+//         PSOParams.FitnessArray[Index] = Fitness;
+
+//         //Ensure that no memory misalignment and access errors occur
+//         cublasDestroy(Handle);
+//         //TODO: free any local memory at the end of the kernel
+//     }
+// }
+
+// FeedForward function on CPU w/o cuBLAS Device API
+void NeuralNetwork::FeedForward(NNParameters &NNParams, PSOParameters &PSOParams)
 {
-    int Index = blockDim.x * blockIdx.x + threadIdx.x;
-    __shared__ NNParameters NNParams;
-    __shared__ PSOParameters PSOParams;
+    //cuBLAS handle initialization
+    cublasHandle_t Handle;
+    cublasCreate(&Handle);
 
-    if(threadIdx.x == 0)
+    //Alpha and beta values
+    float Alpha = 1.0f;
+    float Beta = 0.0f;
+
+    //Input, output, matrix and temporary pointers
+    float *Input;
+    float *Output;
+    float *Matrix;
+    float *Temp;
+
+    for(int j = 0; j < NNParams.NumVectors; j++)
     {
-        NNParams = *NNP;
-        PSOParams = *PSOP;
-    }
-
-    if(Index < PSOParams.NumParticles)
-    {
-        //Pointer to weights and biases
-        float *WeightsAndBiases = &NNParams.WeightsAndBiases[Index * NNParams.NetworkSize];
-
-        //Input, output, matrix and temporary pointers
-        float *Input;
-        float *Output;
-        float *Matrix;
-        float *Temp;
-
-        //Fitness value
-        float Fitness = 0.0f;
-
-        //cuBLAS handle initialization
-        cublasHandle_t Handle;
-        cublasCreate(&Handle);
-
-        //Alpha and beta values
-        float Alpha = 1.0f;
-        float Beta = 0.0f;
-
-        Fitness = 0.0f;
-
-        //Main feed forward work to be done here
-        //Calculate fitness, i.e. loss (MSE?)
-        for(int j = 0; j < NNParams.NumVectors; j++)
+        for(int i = 0; i < PSOParams.NumParticles; i++)
         {
-            //Input hidden multiplication + biases
-            Input = &(NNParams.InputFeatures[NNParams.InputNeurons * j]);
-            Output = &(NNParams.IntermediateIO[NNParams.MaxIOLength * Index]);
-            Matrix = &(NNParams.WeightsAndBiases[NNParams.NetworkSize * Index]);
+            Input = NNParams.InputFeatures + (NNParams.InputNeurons * j);
+            Output = NNParams.IntermediateIO + (NNParams.MaxIOLength * i);
+            Matrix = NNParams.WeightsAndBiases + (NNParams.NetworkSize * i);
 
+            //Main feed forward work to be done here
+            //Calculate fitness, i.e. loss (MSE?)
+
+            //Input hidden multiplication + biases
             cublasSgemv(Handle, CUBLAS_OP_N,
                 NNParams.HiddenNeurons, NNParams.InputNeurons, &Alpha,
                 Matrix, NNParams.HiddenNeurons, Input, 1, &Beta, Output, 1);
-            cudaDeviceSynchronize();
 
             Matrix += NNParams.InputNeurons * NNParams.HiddenNeurons;
 
@@ -161,10 +269,6 @@ void FeedForward(NNParameters *NNP, PSOParameters *PSOP)
 
             //Activation function
             LeakyReLU <<<(NNParams.HiddenNeurons - 1) / 32 + 1, 32>>> (Output, NNParams.HiddenNeurons);
-            cudaDeviceSynchronize();
-
-            Input = Output + NNParams.MaxIOLength / 2;
-            Matrix += NNParams.HiddenNeurons;
 
             //Hidden hidden loop
             for(int c = 1; c < NNParams.HiddenLayers; c++)
@@ -178,7 +282,6 @@ void FeedForward(NNParameters *NNP, PSOParameters *PSOP)
                 cublasSgemv(Handle, CUBLAS_OP_N,
                     NNParams.HiddenNeurons, NNParams.HiddenNeurons, &Alpha,
                     Matrix, NNParams.HiddenNeurons, Input, 1, &Beta, Output, 1);
-                cudaDeviceSynchronize();
 
                 Matrix += NNParams.HiddenNeurons * NNParams.HiddenNeurons;
 
@@ -188,7 +291,6 @@ void FeedForward(NNParameters *NNP, PSOParameters *PSOP)
 
                 //Activation function
                 LeakyReLU <<<(NNParams.HiddenNeurons - 1) / 32 + 1, 32>>> (Output, NNParams.HiddenNeurons);
-                cudaDeviceSynchronize();
 
                 Matrix += NNParams.HiddenNeurons;
             }
@@ -198,7 +300,6 @@ void FeedForward(NNParameters *NNP, PSOParameters *PSOP)
             cublasSgemv(Handle, CUBLAS_OP_N,
                 NNParams.OutputNeurons, NNParams.HiddenNeurons, &Alpha,
                 Matrix, NNParams.OutputNeurons, Input, 1, &Beta, Output, 1);
-            cudaDeviceSynchronize();
 
             Matrix += NNParams.HiddenNeurons * NNParams.OutputNeurons;
 
@@ -207,19 +308,20 @@ void FeedForward(NNParameters *NNP, PSOParameters *PSOP)
                 &Alpha, Matrix, 1, Output, 1);
 
             //Activation function
-            Sigmoid <<<(NNParams.HiddenNeurons - 1) / 32 + 1, 32>>> (Output, NNParams.OutputNeurons);
-            cudaDeviceSynchronize();
-
-            Fitness += (NNParams.OutputFeatures[j] - Output[0]) * (NNParams.OutputFeatures[j] - Output[0]);
+            Sigmoid <<<(NNParams.OutputNeurons - 1) / 32 + 1, 32>>> (Output, NNParams.OutputNeurons);
+            // MeanSquaredError <<<(NNParams.OutputNeurons - 1) / 32 + 1, 32>>> (PSOParams.FitnessArray, Output, NNParams.OutputNeurons);
         }
 
-        Fitness /= NNParams.NumVectors;
-        PSOParams.FitnessArray[Index] = Fitness;
-
-        //Ensure that no memory misalignment and access errors occur
-        cublasDestroy(Handle);
-        //TODO: free any local memory at the end of the kernel
+        //Calculate fitness
+        float *OutputFeaturesPointer = NNParams.OutputFeatures + j;
+        SquaredError <<<(PSOParams.NumParticles - 1) / 32 + 1, 32>>> (Output, OutputFeaturesPointer, PSOParams.FitnessArray, PSOParams.NumParticles);
     }
+
+    // Calculate mean fitness
+    Mean <<<(PSOParams.NumParticles - 1) / 32 + 1, 32>>> (PSOParams.FitnessArray, NNParams.NumVectors, PSOParams.NumParticles);
+
+    //Ensure that no memory misalignment and access errors occur
+    cublasDestroy(Handle);
 }
 
 // PSO kernel
@@ -347,9 +449,9 @@ void NeuralNetwork::CheckKernel()
         for(int j = 0; j < 4; j++)
         {
             a[i * 4 + j] = i * 4 + j;
-            cout << a[i * 4 + j] << " ";
+            std::cout << a[i * 4 + j] << " ";
         }
-        cout << endl;
+        std::cout << std::endl;
     }
 
     float *deva, *devb;
@@ -367,9 +469,9 @@ void NeuralNetwork::CheckKernel()
     {
         for(int j = 0; j < 3; j++)
         {
-            cout << b[i * 3 + j] << " ";
+            std::cout << b[i * 3 + j] << " ";
         }
-        cout << endl;
+        std::cout << std::endl;
     }
 }
 
@@ -383,7 +485,7 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
     this->NNParams.HiddenNeurons = HiddenNeurons;
     this->NNParams.OutputNeurons = OutputNeurons;
     this->PSOParams.NumParticles = NumParticles;
-    cout << "HYPERPARAMETERS SET" << endl;
+    std::cout << "HYPERPARAMETERS SET" << std::endl;
 
     //Initialize random weights and biases on the GPU
     //Calculate total number of weights and biases for memory allocation
@@ -396,19 +498,19 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
     //Total
     int TotalWeightsAndBiases = NumParticles * NetworkSize;
 
-    cout << "TOTAL SPACE FOR WEIGHTS AND BIASES: " << TotalWeightsAndBiases * 4 / 1024 << "KB" << endl;
+    std::cout << "TOTAL SPACE FOR WEIGHTS AND BIASES: " << TotalWeightsAndBiases * 4 / 1024 << "KB" << std::endl;
 
     //Allocate device memory for weights and biases
     float *WeightsAndBiases;
     cudaMalloc((void**)&WeightsAndBiases, TotalWeightsAndBiases * sizeof(float));
     cudaCheckError();
-    cout << "GPU SPACE ALLOCATED FOR WEIGHTS AND BIASES" << endl;
+    std::cout << "GPU SPACE ALLOCATED FOR WEIGHTS AND BIASES" << std::endl;
 
     //Allocate device memory for weights and biases
     float *PersonalBestWeights;
     cudaMalloc((void**)&PersonalBestWeights, TotalWeightsAndBiases * sizeof(float));
     cudaCheckError();
-    cout << "GPU SPACE ALLOCATED FOR PERSONAL BEST WEIGHTS AND BIASES" << endl;
+    std::cout << "GPU SPACE ALLOCATED FOR PERSONAL BEST WEIGHTS AND BIASES" << std::endl;
 
     //Max space to be allocated to intermediate I/O
     int MaxIOLength = 2 * max(InputNeurons, max(HiddenNeurons, OutputNeurons));
@@ -422,18 +524,20 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
     float *Velocities;
     cudaMalloc((void**)&Velocities, TotalWeightsAndBiases * sizeof(float));
     cudaCheckError();
-    cout << "GPU SPACE ALLOCATED FOR VELOCITIES" << endl;
+    std::cout << "GPU SPACE ALLOCATED FOR VELOCITIES" << std::endl;
+
+    //InitToVal grid and block
+    dim3 InitGrid((this->PSOParams.NumParticles - 1) / 32 + 1, 1, 1);
+    dim3 InitBlock(32, 1, 1);
 
     //Allocate device memory for fitness values
     float *FitnessArray;
     cudaMalloc((void**)&FitnessArray, NumParticles * sizeof(float));
     cudaCheckError();
+    InitToVal <<<InitGrid, InitBlock>>> (FitnessArray, this->PSOParams.NumParticles, 0.0f);
+    cudaCheckError();
     this->PSOParams.FitnessArray = FitnessArray;
-    cout << "GPU SPACE ALLOCATED FOR FITNESS VALUES" << endl;
-
-    //InitToVal grid and block
-    dim3 InitGrid((this->PSOParams.NumParticles - 1) / 32 + 1, 1, 1);
-    dim3 InitBlock(32, 1, 1);
+    std::cout << "GPU SPACE ALLOCATED FOR FITNESS VALUES" << std::endl;
 
     //Allocate device memory for fitness values
     float *PersonalBestFitness;
@@ -442,14 +546,14 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
     InitToVal <<<InitGrid, InitBlock>>> (PersonalBestFitness, this->PSOParams.NumParticles, INF);
     cudaCheckError();
     this->PSOParams.PersonalBestFitness = PersonalBestFitness;
-    cout << "GPU SPACE ALLOCATED FOR PERSONAL BEST FITNESS VALUES" << endl;
+    std::cout << "GPU SPACE ALLOCATED FOR PERSONAL BEST FITNESS VALUES" << std::endl;
 
     //Initialize generator
     curandGenerator_t Gen;
     curandCreateGenerator(&Gen, CURAND_RNG_QUASI_SOBOL32);
     curandSetQuasiRandomGeneratorDimensions(Gen, this->NNParams.NetworkSize);
     curandSetPseudoRandomGeneratorSeed(Gen, time(NULL));
-    cout << "CURAND GENERATOR INITIALIZED" << endl;
+    std::cout << "CURAND GENERATOR INITIALIZED" << std::endl;
 
     //Dim3 variables for Normalize kernel
     dim3 NormalizeGrid(NetworkSize, 1, 1);
@@ -466,7 +570,7 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
     Transpose <<<TransposeGrid, TransposeBlock>>> (WeightsAndBiases, PersonalBestWeights, this->NNParams.NetworkSize, this->PSOParams.NumParticles);
     cudaCheckError();
     this->NNParams.WeightsAndBiases = WeightsAndBiases;
-    cout << "WEIGHTS AND BIASES INITIALIZED ON GPU" << endl;
+    std::cout << "WEIGHTS AND BIASES INITIALIZED ON GPU" << std::endl;
 
     //Copy generated weights and biases to personal best array for initialization
     DeviceToDevice <<<NormalizeGrid, NormalizeBlock>>> (WeightsAndBiases, PersonalBestWeights, TotalWeightsAndBiases);
@@ -477,7 +581,7 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
     Normalize <<<NormalizeGrid, NormalizeBlock>>> (Velocities, TotalWeightsAndBiases, 1.0f);
     cudaCheckError();
     this->PSOParams.Velocities = Velocities;
-    cout << "VELOCITIES INITIALIZED ON GPU" << endl;
+    std::cout << "VELOCITIES INITIALIZED ON GPU" << std::endl;
 
     //Allocate space for curand states
     curandState_t *States;
@@ -486,7 +590,7 @@ NeuralNetwork::NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeuro
     InitRNGStates <<<InitGrid, InitBlock>>> (States, this->PSOParams.NumParticles);
     cudaCheckError();
     this->PSOParams.States = States;
-    cout << "SPACE ALLOCATED FOR CURAND STATES" << endl;
+    std::cout << "SPACE ALLOCATED FOR CURAND STATES" << std::endl;
 
     //Synchronize all kernel calls upto this point
     cudaDeviceSynchronize();
@@ -503,15 +607,15 @@ void NeuralNetwork::Load(const char *FileName)
     float *OutputFeatures;
     int InputWidth = this->NNParams.InputNeurons;
     int OutputWidth = this->NNParams.OutputNeurons;
-    fstream FIn;
+    std::fstream FIn;
     FIn.open(FileName);
     if(!FIn.fail())
     {
-        cout << "FILE OPENED" << endl;
+        std::cout << "FILE OPENED" << std::endl;
         FIn >> Size;
         InputFeatures = new float[Size * InputWidth];
         OutputFeatures = new float[Size];
-        cout << "SPACE ALLOCATED" << endl;
+        std::cout << "SPACE ALLOCATED" << std::endl;
         int temp;
 
         for(int i = 0; i < Size; i++)
@@ -530,10 +634,10 @@ void NeuralNetwork::Load(const char *FileName)
     }
     FIn.close();
 
-    cout << "INPUT OUTPUT SPACE REQUIRED: " << Size * 24 / 1024 << "KB" << endl;
+    std::cout << "INPUT OUTPUT SPACE REQUIRED: " << Size * 24 / 1024 << "KB" << std::endl;
     this->NNParams.NumVectors = Size;
 
-    cout << "INPUT AND OUTPUT LOADED AND FILE CLOSED" << endl;
+    std::cout << "INPUT AND OUTPUT LOADED AND FILE CLOSED" << std::endl;
 
     //Transfer to GPU (Single cudaMemcpy() for the time being)
     float* DeviceInputFeatures;
@@ -550,7 +654,7 @@ void NeuralNetwork::Load(const char *FileName)
     cudaCheckError();
     this->NNParams.OutputFeatures = DeviceOutputFeatures;
 
-    cout << "INPUT AND OUTPUT TRANSFERRED TO GPU" << endl;
+    std::cout << "INPUT AND OUTPUT TRANSFERRED TO GPU" << std::endl;
 }
 
 // NeuralNetwork::Train()
@@ -613,8 +717,9 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
     //Train using PSO
     for(int i = 0; i < Epochs; i++)
     {
-        cout << "EPOCH (" << i + 1  << " / " << Epochs << ")" << endl;
-        FeedForward <<<Grid, Block>>> (D_NNParams, D_PSOParams);
+        std::cout << "EPOCH (" << i + 1  << " / " << Epochs << ")" << std::endl;
+        // FeedForward <<<Grid, Block>>> (D_NNParams, D_PSOParams);
+        FeedForward(NNParams, PSOParams);
         cudaDeviceSynchronize();
         cudaCheckError();
         PSO <<<Grid, Block>>> (D_NNParams, D_PSOParams);
@@ -627,7 +732,7 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
             cudaCheckError();
             BestIndex = 0;
             Best = Results[0];
-            cout << "[" << Results[0];
+            std::cout << "[" << Results[0];
             for(int j = 1; j < this->PSOParams.NumParticles; j++)
             {
                 if(Best > Results[j])
@@ -635,11 +740,11 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
                     BestIndex = j;
                     Best = Results[j];
                 }
-                cout << ", " << Results[j];
+                std::cout << ", " << Results[j];
             }
-            cout << "]" << endl;
-            cout << "BEST PARTICLE: " << BestIndex << endl;
-            cout << "BEST FITNESS: " << Best << endl;
+            std::cout << "]" << std::endl;
+            std::cout << "BEST PARTICLE: " << BestIndex << std::endl;
+            std::cout << "BEST FITNESS: " << Best << std::endl;
         }
     }
 
@@ -657,8 +762,8 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
         }
     }
 
-    cout << "FINAL BEST PARTICLE: " << BestIndex << endl;
-    cout << "FINAL BEST FITNESS: " << Best << endl;
+    std::cout << "FINAL BEST PARTICLE: " << BestIndex << std::endl;
+    std::cout << "FINAL BEST FITNESS: " << Best << std::endl;
 
     float *DeviceBestNetwork = &this->PSOParams.PersonalBestWeights[this->NNParams.NetworkSize * BestIndex];
     float *BestNetwork = new float[this->NNParams.NetworkSize];
@@ -666,17 +771,17 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
     cudaCheckError();
 
     //Dump to file
-    fstream FOut;
-    FOut.open(WeightsFile, fstream::out);
+    std::fstream FOut;
+    FOut.open(WeightsFile, std::fstream::out);
     if(!FOut.fail())
     {
-        FOut << this->NNParams.InputNeurons << endl;
-        FOut << this->NNParams.HiddenLayers << endl;
-        FOut << this->NNParams.HiddenNeurons << endl;
-        FOut << this->NNParams.OutputNeurons << endl;
+        FOut << this->NNParams.InputNeurons << std::endl;
+        FOut << this->NNParams.HiddenLayers << std::endl;
+        FOut << this->NNParams.HiddenNeurons << std::endl;
+        FOut << this->NNParams.OutputNeurons << std::endl;
         for(int i = 0; i < this->NNParams.NetworkSize; i++)
         {
-            FOut << BestNetwork[i] << endl;
+            FOut << BestNetwork[i] << std::endl;
         }
     }
     FOut.close();
@@ -686,14 +791,14 @@ void NeuralNetwork::Train(int Epochs, const char *WeightsFile, bool Verbose)
 // Tests a set of weights and biases and reports the loss
 void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
 {
-    fstream FIn;
+    std::fstream FIn;
     int InputNeurons = 0;
     int HiddenLayers = 0;
     int HiddenNeurons = 0;
     int OutputNeurons = 0;
     int NetworkSize = 0;
     float *Weights;
-    FIn.open(WeightsFile, fstream::in);
+    FIn.open(WeightsFile, std::fstream::in);
     if(!FIn.fail())
     {
         FIn >> InputNeurons;
@@ -715,7 +820,7 @@ void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
     int NumSamples = 0;
     float *InputFeatures;
     float *OutputFeatures;
-    FIn.open(TestFile, fstream::in);
+    FIn.open(TestFile, std::fstream::in);
     if(!FIn.fail())
     {
         FIn >> NumSamples;
@@ -769,19 +874,16 @@ void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
         cublasSgemv(Handle, CUBLAS_OP_N,
             HiddenNeurons, InputNeurons, &Alpha,
             Matrix, HiddenNeurons, Input, 1, &Beta, Output, 1);
-        cudaDeviceSynchronize();
 
         Matrix += InputNeurons * HiddenNeurons;
 
         //Add biases
         cublasSaxpy(Handle, HiddenNeurons,
             &Alpha, Matrix, 1, Output, 1);
-        cudaDeviceSynchronize();
 
         //Activation function
         LeakyReLU <<<(HiddenNeurons - 1) / 32 + 1, 32>>> (Output, HiddenNeurons);
         cudaCheckError();
-        cudaDeviceSynchronize();
 
         Input = Output + MaxIOLength / 2;
         Matrix += HiddenNeurons;
@@ -798,19 +900,16 @@ void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
             cublasSgemv(Handle, CUBLAS_OP_N,
                 HiddenNeurons, HiddenNeurons, &Alpha,
                 Matrix, HiddenNeurons, Input, 1, &Beta, Output, 1);
-            cudaDeviceSynchronize();
 
             Matrix += HiddenNeurons * HiddenNeurons;
 
             //Add biases
             cublasSaxpy(Handle, HiddenNeurons,
                 &Alpha, Matrix, 1, Output, 1);
-            cudaDeviceSynchronize();
 
             //Activation function
             LeakyReLU <<<(HiddenNeurons - 1) / 32 + 1, 32>>> (Output, HiddenNeurons);
             cudaCheckError();
-            cudaDeviceSynchronize();
 
             Matrix += HiddenNeurons;
         }
@@ -820,19 +919,16 @@ void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
         cublasSgemv(Handle, CUBLAS_OP_N,
             OutputNeurons, HiddenNeurons, &Alpha,
             Matrix, OutputNeurons, Input, 1, &Beta, Output, 1);
-        cudaDeviceSynchronize();
 
         Matrix += HiddenNeurons * OutputNeurons;
 
         //Add biases
         cublasSaxpy(Handle, OutputNeurons,
             &Alpha, Matrix, 1, Output, 1);
-        cudaDeviceSynchronize();
 
         //Activation function
         Sigmoid <<<(OutputNeurons - 1) / 32 + 1, 32>>> (Output, OutputNeurons);
         cudaCheckError();
-        cudaDeviceSynchronize();
 
         cudaMemcpy(&TempFitness, Output, OutputNeurons * sizeof(float), cudaMemcpyDeviceToHost);
         Fitness += (OutputFeatures[j] - TempFitness) * (OutputFeatures[j] - TempFitness);
@@ -841,5 +937,5 @@ void NeuralNetwork::Test(const char *TestFile, const char *WeightsFile)
     cublasDestroy(Handle);
     Fitness /= NumSamples;
 
-    cout << "TEST FITNESS: " << Fitness << endl;
+    std::cout << "TEST FITNESS: " << Fitness << std::endl;
 }

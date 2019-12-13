@@ -49,29 +49,33 @@ private:
     PSOParameters PSOParams;
     NNParameters NNParams;
 
+    // Dump()
+    // Dump the best set of weights and biases to a file
+    void CheckKernel();
+
+    // FeedForward()
+    // Carry out the neural network feedforward for all networks.
+    void FeedForward(NNParameters &NNParams, PSOParameters &PSOParams);
+
 public:
-    //Randomly initialize weights and biases for all particles of the swarm
+    // Randomly initialize weights and biases for all particles of the swarm
     NeuralNetwork(int InputNeurons, int HiddenLayers, int HiddenNeurons, int OutputNeurons, int NumParticles);
 
-    //Load()
-    //Load data from a file into the main memory/GPU memory (as needed)
-    //Reshape data if needed (especially separating input features from output labels)
-    //Set up streams later on if needed
+    // Load()
+    // Load data from a file into the main memory/GPU memory (as needed)
+    // Reshape data if needed (especially separating input features from output labels)
+    // Set up streams later on if needed
     void Load(const char *FileName);
 
-    //Train()
-    //FeedForward combined with PSO
-    //Number of particles taken from constructor
+    // Train()
+    // FeedForward combined with PSO
+    // Number of particles taken from constructor
     void Train(int Epochs, const char *WeightsFile, bool Verbose);
 
 
-    //Test()
-    //Use the best set of weights and biases amongst all particles
+    // Test()
+    // Use the best set of weights and biases amongst all particles
     void Test(const char *TestFile, const char *WeightsFile);
-
-    //Dump()
-    //Dump the best set of weights and biases to a file
-    void CheckKernel();
 };
 
 #endif

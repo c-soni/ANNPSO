@@ -1,1 +1,1 @@
--o application neural_network.cu application.cpp -lcurand -lcublas -lcublas_device -lcudart -rdc=true -arch=sm_35 --use_fast_math -w
+-o application neural_network.cu application.cpp -lcurand -lcublas -lcudart -rdc=true -arch=sm_35 --use_fast_math
