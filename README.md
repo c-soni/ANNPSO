@@ -28,4 +28,4 @@ Training using both PSO and backprop for a better rate of convergence. Current r
 
 ##### Issues on this repo serve more as a to-do list than as actual issues.
 
-###### Any suggestions and feedback are welcome. Feel free to comment on any issue or drop an email at (chintan.soni4@gmail.com)
+###### Any suggestions and feedback are welcome. Feel free to raise an issue.
